@@ -1,0 +1,113 @@
+{
+    "name": "Parallel Matrix Hadamard Product Tests",
+    "tests": [
+        {
+            "name": "Matrix 0 -- Pipe",
+            "description": "Compute hadamard product using 1 child process and a pipe for IPC",
+            "command": "python3 hadamard_main.py test_cases/resources/mat_00_a.bin test_cases/resources/mat_00_b.bin pipe 1",
+            "output_file": "test_cases/output/mat_00.txt"
+        },
+        {
+            "name": "Matrix 1 -- Pipe",
+            "description": "Compute hadamard product using 2 child processes and a pipe for IPC",
+            "command": "python3 hadamard_main.py test_cases/resources/mat_01_a.bin test_cases/resources/mat_01_b.bin pipe 2",
+            "output_file": "test_cases/output/mat_01.txt"
+        },
+        {
+            "name": "Matrix 2 -- Pipe",
+            "description": "Compute hadamard product using 3 child processes and a pipe for IPC",
+            "command": "python3 hadamard_main.py test_cases/resources/mat_02_a.bin test_cases/resources/mat_02_b.bin pipe 3",
+            "output_file": "test_cases/output/mat_02.txt"
+        },
+        {
+            "name": "Matrix 3 -- Pipe",
+            "description": "Compute hadamard product using 4 child processes and a pipe for IPC",
+            "command": "python3 hadamard_main.py test_cases/resources/mat_03_a.bin test_cases/resources/mat_03_b.bin pipe 4",
+            "output_file": "test_cases/output/mat_03.txt"
+        },
+        {
+            "name": "Matrix 4 -- Pipe",
+            "description": "Compute hadamard product using 8 child processes and a pipe for IPC",
+            "command": "python3 hadamard_main.py test_cases/resources/mat_04_a.bin test_cases/resources/mat_04_b.bin pipe 8",
+            "output_file": "test_cases/output/mat_04.txt"
+        },
+        {
+            "name": "Matrix 5 -- Pipe",
+            "description": "Compute hadamard product using 11 child processes and a pipe for IPC",
+            "command": "python3 hadamard_main.py test_cases/resources/mat_05_a.bin test_cases/resources/mat_05_b.bin pipe 11",
+            "output_file": "test_cases/output/mat_05.txt"
+        },
+        {
+            "name": "Matrix 6 -- Pipe",
+            "description": "Compute hadamard product using 16 child processes and a pipe for IPC",
+            "command": "python3 hadamard_main.py test_cases/resources/mat_06_a.bin test_cases/resources/mat_06_b.bin pipe 16",
+            "output_file": "test_cases/output/mat_06.txt"
+        },
+        {
+            "name": "Matrix 7 -- Pipe",
+            "description": "Compute hadamard product using 20 child processes and a pipe for IPC",
+            "command": "python3 hadamard_main.py test_cases/resources/mat_07_a.bin test_cases/resources/mat_07_b.bin pipe 20",
+            "output_file": "test_cases/output/mat_07.txt"
+        },
+        {
+            "name": "Matrix 8 -- Pipe",
+            "description": "Compute hadamard product using 32 child processes and a pipe for IPC",
+            "command": "python3 hadamard_main.py test_cases/resources/mat_08_a.bin test_cases/resources/mat_08_b.bin pipe 32",
+            "output_file": "test_cases/output/mat_08.txt"
+        },
+        {
+            "name": "Matrix 0 -- Shared Mem",
+            "description": "Compute hadamard product using 1 child process and shared memory for IPC",
+            "command": "python3 hadamard_main.py test_cases/resources/mat_00_a.bin test_cases/resources/mat_00_b.bin shmem 1",
+            "output_file": "test_cases/output/mat_00.txt"
+        },
+        {
+            "name": "Matrix 1 -- Shared Mem",
+            "description": "Compute hadamard product using 2 child processes and shared memory for IPC",
+            "command": "python3 hadamard_main.py test_cases/resources/mat_01_a.bin test_cases/resources/mat_01_b.bin shmem 2",
+            "output_file": "test_cases/output/mat_01.txt"
+        },
+        {
+            "name": "Matrix 2 -- Shared Mem",
+            "description": "Compute hadamard product using 3 child processes and shared memory for IPC",
+            "command": "python3 hadamard_main.py test_cases/resources/mat_02_a.bin test_cases/resources/mat_02_b.bin shmem 3",
+            "output_file": "test_cases/output/mat_02.txt"
+        },
+        {
+            "name": "Matrix 3 -- Shared Mem",
+            "description": "Compute hadamard product using 4 child processes and shared memory for IPC",
+            "command": "python3 hadamard_main.py test_cases/resources/mat_03_a.bin test_cases/resources/mat_03_b.bin shmem 4",
+            "output_file": "test_cases/output/mat_03.txt"
+        },
+        {
+            "name": "Matrix 4 -- Shared Mem",
+            "description": "Compute hadamard product using 8 child processes and shared memory for IPC",
+            "command": "python3 hadamard_main.py test_cases/resources/mat_04_a.bin test_cases/resources/mat_04_b.bin shmem 8",
+            "output_file": "test_cases/output/mat_04.txt"
+        },
+        {
+            "name": "Matrix 5 -- Shared Mem",
+            "description": "Compute hadamard product using 11 child processes and shared memory for IPC",
+            "command": "python3 hadamard_main.py test_cases/resources/mat_05_a.bin test_cases/resources/mat_05_b.bin shmem 11",
+            "output_file": "test_cases/output/mat_05.txt"
+        },
+        {
+            "name": "Matrix 6 -- Shared Mem",
+            "description": "Compute hadamard product using 16 child processes and shared memory for IPC",
+            "command": "python3 hadamard_main.py test_cases/resources/mat_06_a.bin test_cases/resources/mat_06_b.bin shmem 16",
+            "output_file": "test_cases/output/mat_06.txt"
+        },
+        {
+            "name": "Matrix 7 -- Shared Mem",
+            "description": "Compute hadamard product using 20 child processes and shared memory for IPC",
+            "command": "python3 hadamard_main.py test_cases/resources/mat_07_a.bin test_cases/resources/mat_07_b.bin shmem 20",
+            "output_file": "test_cases/output/mat_07.txt"
+        },
+        {
+            "name": "Matrix 8 -- Shared Mem",
+            "description": "Compute hadamard product using 32 child processes and shared memory for IPC",
+            "command": "python3 hadamard_main.py test_cases/resources/mat_08_a.bin test_cases/resources/mat_08_b.bin shmem 32",
+            "output_file": "test_cases/output/mat_08.txt"
+        }
+    ]
+}
