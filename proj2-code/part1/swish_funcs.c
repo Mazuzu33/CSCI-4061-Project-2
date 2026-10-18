@@ -28,6 +28,48 @@
 int run_piped_command(strvec_t *tokens, int *pipes, int n_pipe_fds, int in_idx, int out_idx)
 {
     // TODO Complete this function's implementation
+
+    int pid = fork();
+
+    if (pid == -1)
+    {
+        perror("failed to fork");
+        return -1;
+    }
+    else if (pid == 0)
+    {
+        // don't read from pipe
+        if (in_idx == -1)
+        {
+            dup2(pipes[out_idx], STDOUT_FILENO);
+        }
+        // don't write from pipe
+        if (out_idx == -1)
+        {
+            dup2(pipes[in_idx], STDIN_FILENO);
+        }
+
+        int tokens_length = tokens->length;
+        char args[tokens_length + 1];
+
+        // turn tokens into args array and put NULL at the end
+        for (int arg = 0; args < tokens_length; arg++)
+        {
+            args[arg] = strvec_get(tokens, arg);
+        }
+        args[tokens_length] = NULL;
+
+        if (run_command(tokens) == -1)
+        {
+            perror("failed to run command");
+            return -1;
+        }
+
+        return 0;
+    }
+
+    wait(NULL);
+
     return 0;
 }
 
