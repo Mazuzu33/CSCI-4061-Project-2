@@ -28,48 +28,29 @@
 int run_piped_command(strvec_t *tokens, int *pipes, int n_pipe_fds, int in_idx, int out_idx)
 {
     // TODO Complete this function's implementation
-
-    int pid = fork();
-
-    if (pid == -1)
+    // don't read from pipe
+    if (in_idx != -1)
     {
-        perror("failed to fork");
-        return -1;
-    }
-    else if (pid == 0)
-    {
-        // don't read from pipe
-        if (in_idx == -1)
+        if (dup2(pipes[in_idx], STDIN_FILENO) == -1)
         {
-            dup2(pipes[out_idx], STDOUT_FILENO);
-        }
-        // don't write from pipe
-        if (out_idx == -1)
-        {
-            dup2(pipes[in_idx], STDIN_FILENO);
-        }
-
-        int tokens_length = tokens->length;
-        char args[tokens_length + 1];
-
-        // turn tokens into args array and put NULL at the end
-        for (int arg = 0; args < tokens_length; arg++)
-        {
-            args[arg] = strvec_get(tokens, arg);
-        }
-        args[tokens_length] = NULL;
-
-        if (run_command(tokens) == -1)
-        {
-            perror("failed to run command");
+            perror("dup2");
             return -1;
         }
-
-        return 0;
     }
-
-    wait(NULL);
-
+    // don't write from pipe
+    if (out_idx != -1)
+    {
+        if (dup2(pipes[out_idx], STDOUT_FILENO) == -1)
+        {
+            perror("dup2");
+            return -1;
+        }
+    }
+    if (run_command(tokens) == -1)
+    {
+        fprintf(stderr, "Failed to run command\n");
+        return -1;
+    }
     return 0;
 }
 
@@ -81,7 +62,7 @@ int run_pipelined_commands(strvec_t *tokens)
     int pipe_fds[numPipes * 2];
     for (int i = 0; i < numPipes; i++)
     {
-        if (pipe(pipe_fds[2 * i]) == -1)
+        if (pipe(&pipe_fds[2 * i]) == -1)
         {
             perror("pipe");
             // Close all pipe descripters that have been created so far
@@ -89,12 +70,12 @@ int run_pipelined_commands(strvec_t *tokens)
             {
                 close(pipe_fds[j]);
             }
+            return -1;
         }
     }
     // Fork a child process for every pipe with one additional
     for (int i = numPipes; i >= 0; i--)
     {
-        // Check if fork returns an error
         pid_t pid = fork();
         if (pid == -1)
         {
@@ -104,13 +85,24 @@ int run_pipelined_commands(strvec_t *tokens)
             {
                 close(pipe_fds[j]);
             }
+            return -1;
         }
         // For each child process, run its specified command
         if (pid == 0)
         {
             // Close all pipe fds except for the ones it will read from or write to
-            int readEnd = i * 2 - 1;
-            int writeEnd = i * 2;
+            int readEnd = i * 2 - 2;
+            int writeEnd = i * 2 + 1;
+            // Set readEnd to -1 if this is the first command
+            if (readEnd == -2)
+            {
+                readEnd = -1;
+            }
+            // Set writeEnd to -1 if this is the last command
+            if (writeEnd == numPipes * 2 + 1)
+            {
+                writeEnd = -1;
+            }
             for (int j = 0; j < 2 * numPipes; j++)
             {
                 if (j != readEnd && j != writeEnd)
@@ -118,54 +110,114 @@ int run_pipelined_commands(strvec_t *tokens)
                     close(pipe_fds[j]);
                 }
             }
-            // Set command to read from previous pipe and write to next pipe
-            int in_idx = i - 1;
-            int out_idx = i + 1;
-            // Do not read from previous pipe for the first command. Do not write to next pipe for the last command.
-            if (i == 0)
-            {
-                in_idx = -1;
-            }
-            else if (i == numPipes)
-            {
-                out_idx = -1;
-            }
             // Get the program name and arguments for the specified process
             // Make a copy of tokens
-            strvec_t *copyTokens;
-            if (strvec_slice(tokens, copyTokens, 0, tokens->length) == -1)
+            strvec_t copyTokens;
+            if (strvec_init(&copyTokens) == -1)
+            {
+                fprintf(stderr, "Could not initialize strvec_t\n");
+                // Close appropriate pipe descriptors
+                if (readEnd != -1)
+                {
+                    close(pipe_fds[readEnd]);
+                }
+                if (writeEnd != -1)
+                {
+                    close(pipe_fds[writeEnd]);
+                }
+                return -1;
+            }
+            if (strvec_slice(tokens, &copyTokens, 0, tokens->length) == -1)
             {
                 fprintf(stderr, "Tokens slicing failed\n");
                 // Close appropriate pipe descriptors
-                close(pipe_fds[readEnd]);
-                close(pipe_fds[writeEnd]);
+                if (readEnd != -1)
+                {
+                    close(pipe_fds[readEnd]);
+                }
+                if (writeEnd != -1)
+                {
+                    close(pipe_fds[writeEnd]);
+                }
+                // Free copyTokens
+                strvec_clear(&copyTokens);
+                return -1;
             }
-            // Get the index of the pipe that comes after the command, which is set to -1 if it doesn't exist
-            int endPipeIndex = -1;
+            // Get the index of the pipe that comes after the command, which is set to the length of tokens if it doesn't exist
+            int endPipeIndex = tokens->length;
             for (int j = numPipes; j > i; j--)
             {
-                endPipeIndex = strvec_find_last(copyTokens, "|");
-                if (strvec_slice(copyTokens, copyTokens, 0, endPipeIndex) == -1)
+                endPipeIndex = strvec_find_last(&copyTokens, "|");
+                if (strvec_slice(tokens, &copyTokens, 0, endPipeIndex) == -1)
                 {
                     fprintf(stderr, "Tokens slicing failed\n");
                     // Close appropriate pipe descriptors
-                    close(pipe_fds[readEnd]);
-                    close(pipe_fds[writeEnd]);
+                    if (readEnd != -1)
+                    {
+                        close(pipe_fds[readEnd]);
+                    }
+                    if (writeEnd != -1)
+                    {
+                        close(pipe_fds[writeEnd]);
+                    }
+                    // Free copyTokens
+                    strvec_clear(&copyTokens);
+                    return -1;
                 }
             }
-            // Get the index of the pipe that comes before the command, which is set to -1 if it doesn't exist
-            int startPipeIndex = strvec_find_last(copyTokens, "|");
+            // Get the index of the pipe that comes before the command, which is set to 0 if it doesn't exist
+            int startPipeIndex = strvec_find_last(&copyTokens, "|");
+            // Free copyTokens
+            strvec_clear(&copyTokens);
+            if (startPipeIndex == -1)
+            {
+                startPipeIndex = 0;
+            }
             // Get the tokens for the speicified command
-            strvec_t *command_tokens;
-            strvec_slice(tokens, command_tokens, startPipeIndex, endPipeIndex);
-            if (run_pipelined_command(command_tokens, pipe_fds, numPipes * 2, in_idx, out_idx) == -1)
+            strvec_t command_tokens;
+            // Intitialize command_tokens
+            if (strvec_init(&command_tokens) == -1)
+            {
+                fprintf(stderr, "Could not initialize strvec_t\n");
+                // Close appropriate pipe descriptors
+                if (readEnd != -1)
+                {
+                    close(pipe_fds[readEnd]);
+                }
+                if (writeEnd != -1)
+                {
+                    close(pipe_fds[writeEnd]);
+                }
+                // Free commandTokens
+                strvec_clear(&command_tokens);
+                return -1;
+            }
+            strvec_slice(tokens, &command_tokens, startPipeIndex, endPipeIndex);
+            if (run_piped_command(&command_tokens, pipe_fds, numPipes * 2, readEnd, writeEnd) == -1)
             {
                 fprintf(stderr, "Couldn't run a pipelined command\n");
                 // Close appropriate pipe descriptors
-                close(pipe_fds[readEnd]);
-                close(pipe_fds[writeEnd]);
+                if (readEnd != -1)
+                {
+                    close(pipe_fds[readEnd]);
+                }
+                if (writeEnd != -1)
+                {
+                    close(pipe_fds[writeEnd]);
+                }
+                // Free commandTokens
+                strvec_clear(&command_tokens);
+                return -1;
             }
+            // Free commandTokens
+            strvec_clear(&command_tokens);
+            exit(0);
         }
+    }
+    // In parent process, wait for every child
+    for (int j = 0; j <= numPipes; j++)
+    {
+        wait(NULL);
     }
     // In parent process, close all pipe fds
     for (int j = 0; j < 2 * numPipes; j++)
