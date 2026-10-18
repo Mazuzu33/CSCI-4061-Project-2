@@ -25,12 +25,110 @@
  *          a pipe.
  * Returns 0 on success or -1 on error.
  */
-int run_piped_command(strvec_t *tokens, int *pipes, int n_pipe_fds, int in_idx, int out_idx) {
+int run_piped_command(strvec_t *tokens, int *pipes, int n_pipe_fds, int in_idx, int out_idx)
+{
     // TODO Complete this function's implementation
     return 0;
 }
 
-int run_pipelined_commands(strvec_t *tokens) {
+int run_pipelined_commands(strvec_t *tokens)
+{
     // TODO Complete this function's implementation
+    // Get the number of pipes and set them up
+    int numPipes = strvec_num_occurrences(tokens, "|");
+    int pipe_fds[numPipes * 2];
+    for (int i = 0; i < numPipes; i++)
+    {
+        if (pipe(pipe_fds[2 * i]) == -1)
+        {
+            perror("pipe");
+            // Close all pipe descripters that have been created so far
+            for (int j = 0; j < 2 * i; j++)
+            {
+                close(pipe_fds[j]);
+            }
+        }
+    }
+    // Fork a child process for every pipe with one additional
+    for (int i = numPipes; i >= 0; i--)
+    {
+        // Check if fork returns an error
+        pid_t pid = fork();
+        if (pid == -1)
+        {
+            perror("fork");
+            // Close all pipe descriptors
+            for (int j = 0; j < 2 * numPipes; j++)
+            {
+                close(pipe_fds[j]);
+            }
+        }
+        // For each child process, run its specified command
+        if (pid == 0)
+        {
+            // Close all pipe fds except for the ones it will read from or write to
+            int readEnd = i * 2 - 1;
+            int writeEnd = i * 2;
+            for (int j = 0; j < 2 * numPipes; j++)
+            {
+                if (j != readEnd && j != writeEnd)
+                {
+                    close(pipe_fds[j]);
+                }
+            }
+            // Set command to read from previous pipe and write to next pipe
+            int in_idx = i - 1;
+            int out_idx = i + 1;
+            // Do not read from previous pipe for the first command. Do not write to next pipe for the last command.
+            if (i == 0)
+            {
+                in_idx = -1;
+            }
+            else if (i == numPipes)
+            {
+                out_idx = -1;
+            }
+            // Get the program name and arguments for the specified process
+            // Make a copy of tokens
+            strvec_t *copyTokens;
+            if (strvec_slice(tokens, copyTokens, 0, tokens->length) == -1)
+            {
+                fprintf(stderr, "Tokens slicing failed\n");
+                // Close appropriate pipe descriptors
+                close(pipe_fds[readEnd]);
+                close(pipe_fds[writeEnd]);
+            }
+            // Get the index of the pipe that comes after the command, which is set to -1 if it doesn't exist
+            int endPipeIndex = -1;
+            for (int j = numPipes; j > i; j--)
+            {
+                endPipeIndex = strvec_find_last(copyTokens, "|");
+                if (strvec_slice(copyTokens, copyTokens, 0, endPipeIndex) == -1)
+                {
+                    fprintf(stderr, "Tokens slicing failed\n");
+                    // Close appropriate pipe descriptors
+                    close(pipe_fds[readEnd]);
+                    close(pipe_fds[writeEnd]);
+                }
+            }
+            // Get the index of the pipe that comes before the command, which is set to -1 if it doesn't exist
+            int startPipeIndex = strvec_find_last(copyTokens, "|");
+            // Get the tokens for the speicified command
+            strvec_t *command_tokens;
+            strvec_slice(tokens, command_tokens, startPipeIndex, endPipeIndex);
+            if (run_pipelined_command(command_tokens, pipe_fds, numPipes * 2, in_idx, out_idx) == -1)
+            {
+                fprintf(stderr, "Couldn't run a pipelined command\n");
+                // Close appropriate pipe descriptors
+                close(pipe_fds[readEnd]);
+                close(pipe_fds[writeEnd]);
+            }
+        }
+    }
+    // In parent process, close all pipe fds
+    for (int j = 0; j < 2 * numPipes; j++)
+    {
+        close(pipe_fds[j]);
+    }
     return 0;
 }
