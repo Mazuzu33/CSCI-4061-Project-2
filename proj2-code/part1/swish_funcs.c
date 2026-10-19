@@ -113,20 +113,6 @@ int run_pipelined_commands(strvec_t *tokens)
             // Get the program name and arguments for the specified process
             // Make a copy of tokens
             strvec_t copyTokens;
-            if (strvec_init(&copyTokens) == -1)
-            {
-                fprintf(stderr, "Could not initialize strvec_t\n");
-                // Close appropriate pipe descriptors
-                if (readEnd != -1)
-                {
-                    close(pipe_fds[readEnd]);
-                }
-                if (writeEnd != -1)
-                {
-                    close(pipe_fds[writeEnd]);
-                }
-                return -1;
-            }
             if (strvec_slice(tokens, &copyTokens, 0, tokens->length) == -1)
             {
                 fprintf(stderr, "Tokens slicing failed\n");
@@ -139,9 +125,9 @@ int run_pipelined_commands(strvec_t *tokens)
                 {
                     close(pipe_fds[writeEnd]);
                 }
-                // Free copyTokens
-                strvec_clear(&copyTokens);
-                return -1;
+                // Free tokens
+                strvec_clear(tokens);
+                exit(1);
             }
             // Get the index of the pipe that comes after the command, which is set to the length of tokens if it doesn't exist
             int endPipeIndex = tokens->length;
@@ -160,25 +146,21 @@ int run_pipelined_commands(strvec_t *tokens)
                     {
                         close(pipe_fds[writeEnd]);
                     }
-                    // Free copyTokens
+                    // Free copyTokens and tokens
                     strvec_clear(&copyTokens);
-                    return -1;
+                    strvec_clear(tokens);
+                    exit(1);
                 }
             }
             // Get the index of the pipe that comes before the command, which is set to 0 if it doesn't exist
-            int startPipeIndex = strvec_find_last(&copyTokens, "|");
+            int startPipeIndex = strvec_find_last(&copyTokens, "|") + 1;
             // Free copyTokens
             strvec_clear(&copyTokens);
-            if (startPipeIndex == -1)
-            {
-                startPipeIndex = 0;
-            }
             // Get the tokens for the speicified command
             strvec_t command_tokens;
-            // Intitialize command_tokens
-            if (strvec_init(&command_tokens) == -1)
+            if (strvec_slice(tokens, &command_tokens, startPipeIndex, endPipeIndex) == -1)
             {
-                fprintf(stderr, "Could not initialize strvec_t\n");
+                fprintf(stderr, "Tokens slicing failed\n");
                 // Close appropriate pipe descriptors
                 if (readEnd != -1)
                 {
@@ -188,11 +170,9 @@ int run_pipelined_commands(strvec_t *tokens)
                 {
                     close(pipe_fds[writeEnd]);
                 }
-                // Free commandTokens
-                strvec_clear(&command_tokens);
-                return -1;
+                strvec_clear(tokens);
+                exit(1);
             }
-            strvec_slice(tokens, &command_tokens, startPipeIndex, endPipeIndex);
             if (run_piped_command(&command_tokens, pipe_fds, numPipes * 2, readEnd, writeEnd) == -1)
             {
                 fprintf(stderr, "Couldn't run a pipelined command\n");
@@ -205,24 +185,35 @@ int run_pipelined_commands(strvec_t *tokens)
                 {
                     close(pipe_fds[writeEnd]);
                 }
-                // Free commandTokens
+                // Free commandTokens and tokens
                 strvec_clear(&command_tokens);
-                return -1;
+                strvec_clear(tokens);
+                exit(1);
             }
-            // Free commandTokens
+            // Free commandTokens and tokens
             strvec_clear(&command_tokens);
+            strvec_clear(tokens);
             exit(0);
         }
-    }
-    // In parent process, wait for every child
-    for (int j = 0; j <= numPipes; j++)
-    {
-        wait(NULL);
     }
     // In parent process, close all pipe fds
     for (int j = 0; j < 2 * numPipes; j++)
     {
         close(pipe_fds[j]);
     }
-    return 0;
+    // In parent process, wait for children and check if they exited with 1
+    int status;
+    int ret_val;
+    for (int j = 0; j <= numPipes; j++)
+    {
+        waitpid(-1, &status, 0);
+        if (WIFEXITED(status))
+        {
+            if (WEXITSTATUS(status) == 1)
+            {
+                ret_val = -1;
+            }
+        }
+    }
+    return ret_val;
 }
