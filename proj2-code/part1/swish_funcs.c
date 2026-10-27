@@ -33,18 +33,26 @@ int run_piped_command(strvec_t *tokens, int *pipes, int n_pipe_fds, int in_idx, 
     {
         if (dup2(pipes[in_idx], STDIN_FILENO) == -1)
         {
+            close(pipes[in_idx]);
+            if (out_idx != -1)
+            {
+                close(pipes[out_idx]);
+            }
             perror("dup2");
             return -1;
         }
+        close(pipes[in_idx]);
     }
     // don't write from pipe
     if (out_idx != -1)
     {
         if (dup2(pipes[out_idx], STDOUT_FILENO) == -1)
         {
+            close(pipes[out_idx]);
             perror("dup2");
             return -1;
         }
+        close(pipes[out_idx]);
     }
     if (run_command(tokens) == -1)
     {
@@ -84,6 +92,11 @@ int run_pipelined_commands(strvec_t *tokens)
             for (int j = 0; j < 2 * numPipes; j++)
             {
                 close(pipe_fds[j]);
+            }
+            // Wait for all children
+            for (int j = 0; j < i; j++)
+            {
+                wait(NULL);
             }
             return -1;
         }
@@ -173,18 +186,10 @@ int run_pipelined_commands(strvec_t *tokens)
                 strvec_clear(tokens);
                 exit(1);
             }
+            // run_piped_command will close its specified pipe_fds for us
             if (run_piped_command(&command_tokens, pipe_fds, numPipes * 2, readEnd, writeEnd) == -1)
             {
                 fprintf(stderr, "Couldn't run a pipelined command\n");
-                // Close appropriate pipe descriptors
-                if (readEnd != -1)
-                {
-                    close(pipe_fds[readEnd]);
-                }
-                if (writeEnd != -1)
-                {
-                    close(pipe_fds[writeEnd]);
-                }
                 // Free commandTokens and tokens
                 strvec_clear(&command_tokens);
                 strvec_clear(tokens);
@@ -203,7 +208,7 @@ int run_pipelined_commands(strvec_t *tokens)
     }
     // In parent process, wait for children and check if they exited with 1
     int status;
-    int ret_val;
+    int ret_val = 0;
     for (int j = 0; j <= numPipes; j++)
     {
         waitpid(-1, &status, 0);

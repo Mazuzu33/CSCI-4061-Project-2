@@ -74,9 +74,16 @@ PyObject *hadamard_pipe(PyObject *self, PyObject *args)
      */
 
     int pipe_fd[2];
-    pipe(pipe_fd);
+    if (pipe(pipe_fd) == -1)
+    {
+        free(mat_a_data);
+        free(mat_b_data);
+        PyErr_SetFromErrno(PyExc_OSError);
+        return NULL;
+    }
 
     int elements = a_cols * a_rows;
+    int mat_size = elements * sizeof(int);
     int chunkElements = elements / n_procs;
     int remainder = elements % n_procs;
 
@@ -88,7 +95,14 @@ PyObject *hadamard_pipe(PyObject *self, PyObject *args)
         {
             close(pipe_fd[0]);
             close(pipe_fd[1]);
-            perror("pipe failed to open");
+            free(mat_a_data);
+            free(mat_b_data);
+            // Wait for other children
+            for (int j = 0; j < n; j++)
+            {
+                wait(NULL);
+            }
+            PyErr_SetFromErrno(PyExc_OSError);
             return NULL;
         }
         else if (child_pid == 0)
@@ -109,7 +123,13 @@ PyObject *hadamard_pipe(PyObject *self, PyObject *args)
                 end = (n + 1) * chunkElements + remainder;
             }
 
-            worker(mat_a_data, mat_b_data, start, end, pipe_fd[1]);
+            if (worker(mat_a_data, mat_b_data, start, end, pipe_fd[1]) == -1)
+            {
+                free(mat_a_data);
+                free(mat_b_data);
+                close(pipe_fd[1]);
+                exit(1);
+            }
 
             free(mat_a_data);
             free(mat_b_data);
@@ -125,31 +145,68 @@ PyObject *hadamard_pipe(PyObject *self, PyObject *args)
     close(pipe_fd[1]);
 
     // const char *mat_c_file;
-    int mat_c_data[elements];
-    memset(mat_c_data, 0, sizeof(mat_c_data));
+    int *mat_c_data = malloc(mat_size);
+    if (mat_c_data == NULL)
+    {
+        close(pipe_fd[0]);
+        for (int i = 0; i < n_procs; i++)
+        {
+            wait(NULL);
+        }
+        return PyErr_NoMemory();
+    }
 
     for (unsigned n = 0; n < elements; n++)
     {
         struct element e;
-        if (read(pipe_fd[0], &e, sizeof(struct element)) != sizeof(struct element))
+        int bytes_read = read(pipe_fd[0], &e, sizeof(struct element));
+        // Error reading bytes
+        if (bytes_read == -1)
         {
-            // Handle read error or unexpected end of pipe.
+            // Handle error reading
+            close(pipe_fd[0]);
+            free(mat_c_data);
+            for (int i = 0; i < n_procs; i++)
+            {
+                wait(NULL);
+            }
+            PyErr_SetFromErrno(PyExc_OSError);
+            return NULL;
+        }
+        // EOF reached early or read of incorrect size
+        else if (bytes_read != sizeof(struct element))
+        {
             break;
         }
-
         mat_c_data[e.idx] = e.value;
     }
 
+    // close reading
     close(pipe_fd[0]);
 
-    // close writing
-    for (int n = 0; n < chunkElements; n++)
+    int status;
+    int work_failed = 0;
+    for (int i = 0; i < n_procs; i++)
     {
-        wait(NULL);
+        waitpid(-1, &status, 0);
+        if (WIFEXITED(status))
+        {
+            if (WEXITSTATUS(status) == 1)
+            {
+                work_failed = 1;
+            }
+        }
     }
-
+    // If a child exited with 1
+    if (work_failed)
+    {
+        free(mat_c_data);
+        PyErr_SetString(PyExc_OSError, "Worker process failed");
+        return NULL;
+    }
+    // If all children exited with 0
     print_matrix(mat_c_data, a_rows, a_cols);
-
+    free(mat_c_data);
     Py_RETURN_NONE;
 }
 
@@ -164,12 +221,23 @@ static int worker(const int *a, const int *b, unsigned start, unsigned end, int 
      * Multiply the two elements, then send result via pipe
      * Don't forget proper error handling and cleanup!
      */
-
+    // Check for null pointers
+    if (a == NULL || b == NULL)
+    {
+        return -1;
+    }
+    // Check if start > end
+    if (end == min(start, end))
+    {
+        return -1;
+    }
     for (unsigned i = start; i < end; i++)
     {
         struct element e = {i, a[i] * b[i]};
-        write(pipe_fd, &e, sizeof(struct element));
+        if (write(pipe_fd, &e, sizeof(struct element)) != sizeof(struct element))
+        {
+            return -1;
+        }
     }
-
     return 0;
 }

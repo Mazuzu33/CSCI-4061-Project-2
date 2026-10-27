@@ -90,6 +90,10 @@ PyObject *hadamard_shmem(PyObject *self, PyObject *args)
         pid_t pid = fork();
         if (pid == -1)
         {
+            for (int j = 0; j < i; j++)
+            {
+                wait(NULL);
+            }
             munmap(mat_a_data, mat_size);
             munmap(mat_b_data, mat_size);
             munmap(mat_c_data, mat_size);
@@ -119,6 +123,8 @@ PyObject *hadamard_shmem(PyObject *self, PyObject *args)
         }
     }
     // In parent process
+    munmap(mat_a_data, mat_size);
+    munmap(mat_b_data, mat_size);
     // Wait for children and check if they exited with 1
     int status;
     int work_failed = 0;
@@ -133,17 +139,16 @@ PyObject *hadamard_shmem(PyObject *self, PyObject *args)
             }
         }
     }
-    // Print matrix C and clean up
-    print_matrix(mat_c_data, a_rows, a_cols);
-    munmap(mat_a_data, mat_size);
-    munmap(mat_b_data, mat_size);
-    munmap(mat_c_data, mat_size);
     // If a child exited with 1
     if (work_failed)
     {
+        munmap(mat_c_data, mat_size);
         PyErr_SetString(PyExc_OSError, "Worker process failed");
+        return NULL;
     }
     // If all children exited with 0
+    print_matrix(mat_c_data, a_rows, a_cols);
+    munmap(mat_c_data, mat_size);
     Py_RETURN_NONE;
 }
 
