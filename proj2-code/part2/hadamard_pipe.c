@@ -73,6 +73,83 @@ PyObject *hadamard_pipe(PyObject *self, PyObject *args)
      * Don't forget cleanup and error handling!
      */
 
+    int pipe_fd[2];
+    pipe(pipe_fd);
+
+    int elements = a_cols * a_rows;
+    int chunkElements = elements / n_procs;
+    int remainder = elements % n_procs;
+
+    for (int n = 0; n < n_procs; n++)
+    {
+        pid_t child_pid = fork();
+        // free and close it
+        if (child_pid == -1)
+        {
+            close(pipe_fd[0]);
+            close(pipe_fd[1]);
+            perror("pipe failed to open");
+            return NULL;
+        }
+        else if (child_pid == 0)
+        {
+            close(pipe_fd[0]);
+
+            unsigned start;
+            unsigned end;
+
+            if (n < remainder)
+            {
+                start = n * chunkElements + n;
+                end = (n + 1) * chunkElements + n + 1;
+            }
+            else
+            {
+                start = n * chunkElements + remainder;
+                end = (n + 1) * chunkElements + remainder;
+            }
+
+            worker(mat_a_data, mat_b_data, start, end, pipe_fd[1]);
+
+            free(mat_a_data);
+            free(mat_b_data);
+
+            close(pipe_fd[1]);
+
+            exit(0);
+        }
+    }
+
+    free(mat_a_data);
+    free(mat_b_data);
+    close(pipe_fd[1]);
+
+    // const char *mat_c_file;
+    int mat_c_data[elements];
+    memset(mat_c_data, 0, sizeof(mat_c_data));
+
+    for (unsigned n = 0; n < elements; n++)
+    {
+        struct element e;
+        if (read(pipe_fd[0], &e, sizeof(struct element)) != sizeof(struct element))
+        {
+            // Handle read error or unexpected end of pipe.
+            break;
+        }
+
+        mat_c_data[e.idx] = e.value;
+    }
+
+    close(pipe_fd[0]);
+
+    // close writing
+    for (int n = 0; n < chunkElements; n++)
+    {
+        wait(NULL);
+    }
+
+    print_matrix(mat_c_data, a_rows, a_cols);
+
     Py_RETURN_NONE;
 }
 
@@ -87,6 +164,12 @@ static int worker(const int *a, const int *b, unsigned start, unsigned end, int 
      * Multiply the two elements, then send result via pipe
      * Don't forget proper error handling and cleanup!
      */
+
+    for (unsigned i = start; i < end; i++)
+    {
+        struct element e = {i, a[i] * b[i]};
+        write(pipe_fd, &e, sizeof(struct element));
+    }
 
     return 0;
 }
